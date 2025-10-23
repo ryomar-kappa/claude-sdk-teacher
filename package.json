@@ -6,7 +6,10 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts",
+    "demo:workdir": "ts-node src/workdir-example.ts",
+    "demo:workdir-custom": "ts-node --cwd /tmp src/workdir-example.ts",
+    "demo:workdir-env": "WORK_DIR=/tmp ts-node src/workdir-example.ts"
   },
   "keywords": [
     "claude",
