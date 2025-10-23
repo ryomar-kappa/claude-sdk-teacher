@@ -10,9 +10,11 @@ claude-sdk-teacher/
 │   ├── index.ts           # Claude APIの基本例
 │   ├── agent-example.ts   # Tool Useの実装例
 │   ├── todo-manager.ts    # Todoマネージャー実装
-│   └── todo-agent.ts      # Todoツール統合エージェント
-├── TOOLS_CATALOG.md       # ツールカタログ（813行）
-├── TODO_TOOL_GUIDE.md     # TodoWriteツール完全ガイド
+│   ├── todo-agent.ts      # Todoツール統合エージェント
+│   └── workdir-example.ts # 作業ディレクトリ制御の実装例
+├── TOOLS_CATALOG.md           # ツールカタログ（813行）
+├── TODO_TOOL_GUIDE.md         # TodoWriteツール完全ガイド
+├── WORKING_DIRECTORY_GUIDE.md # 作業ディレクトリ完全ガイド
 ├── package.json
 ├── tsconfig.json
 └── .env.example
@@ -43,6 +45,9 @@ npx ts-node src/agent-example.ts
 
 # Todoツール付きエージェント
 npx ts-node src/todo-agent.ts "Webアプリケーションを作成してください"
+
+# 作業ディレクトリ制御のデモ
+npm run demo:workdir
 ```
 
 ## 📖 ドキュメント
@@ -64,6 +69,16 @@ TodoWriteツールの完全実装ガイド
 - 使用例とパターン
 - 拡張機能（優先順位、サブタスク、依存関係）
 - ベストプラクティス
+
+### [WORKING_DIRECTORY_GUIDE.md](./WORKING_DIRECTORY_GUIDE.md)
+Node.js/ts-nodeの作業ディレクトリ制御完全ガイド
+
+**内容:**
+- Node.jsの作業ディレクトリの仕組み（process.cwd(), __dirname, etc.）
+- ts-nodeでの作業ディレクトリ制御方法（--cwd, --cwdMode, TS_NODE_CWD）
+- 固定ディレクトリで作業させる方法（FixedDirectoryWorkerクラス）
+- ベストプラクティスと実装パターン
+- Claude Agent SDKでの活用例
 
 ## 🔧 実装例
 
