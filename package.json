@@ -9,7 +9,9 @@
     "dev": "ts-node src/index.ts",
     "demo:workdir": "ts-node src/workdir-example.ts",
     "demo:workdir-custom": "ts-node --cwd /tmp src/workdir-example.ts",
-    "demo:workdir-env": "WORK_DIR=/tmp ts-node src/workdir-example.ts"
+    "demo:workdir-env": "WORK_DIR=/tmp ts-node src/workdir-example.ts",
+    "demo:sandboxed": "ts-node src/sandboxed-agent.ts",
+    "demo:sandboxed-custom": "CLAUDE_WORK_DIR=/tmp/my-workspace ts-node src/sandboxed-agent.ts"
   },
   "keywords": [
     "claude",

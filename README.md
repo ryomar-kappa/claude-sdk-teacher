@@ -11,10 +11,12 @@ claude-sdk-teacher/
 │   ├── agent-example.ts   # Tool Useの実装例
 │   ├── todo-manager.ts    # Todoマネージャー実装
 │   ├── todo-agent.ts      # Todoツール統合エージェント
-│   └── workdir-example.ts # 作業ディレクトリ制御の実装例
+│   ├── workdir-example.ts # 作業ディレクトリ制御の実装例
+│   └── sandboxed-agent.ts # サンドボックス化エージェント実装
 ├── TOOLS_CATALOG.md           # ツールカタログ（813行）
 ├── TODO_TOOL_GUIDE.md         # TodoWriteツール完全ガイド
 ├── WORKING_DIRECTORY_GUIDE.md # 作業ディレクトリ完全ガイド
+├── CLAUDE_SDK_WORKDIR.md      # Claude SDKで固定ディレクトリで作業させる方法
 ├── package.json
 ├── tsconfig.json
 └── .env.example
@@ -48,6 +50,9 @@ npx ts-node src/todo-agent.ts "Webアプリケーションを作成してくだ�
 
 # 作業ディレクトリ制御のデモ
 npm run demo:workdir
+
+# サンドボックス化されたエージェント（APIキー必須）
+npm run demo:sandboxed
 ```
 
 ## 📖 ドキュメント
@@ -79,6 +84,16 @@ Node.js/ts-nodeの作業ディレクトリ制御完全ガイド
 - 固定ディレクトリで作業させる方法（FixedDirectoryWorkerクラス）
 - ベストプラクティスと実装パターン
 - Claude Agent SDKでの活用例
+
+### [CLAUDE_SDK_WORKDIR.md](./CLAUDE_SDK_WORKDIR.md)
+Claude SDKで実行ディレクトリと違うディレクトリで作業させる方法
+
+**内容:**
+- SandboxedFileSystemクラスの実装
+- セキュリティ強化（パストラバーサル攻撃防止、拡張子制限）
+- Claude Agentへのファイル操作ツール統合
+- 実用的な使用例とベストプラクティス
+- 複数エージェントの並列実行パターン
 
 ## 🔧 実装例
 
