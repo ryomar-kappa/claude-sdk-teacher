@@ -3,372 +3,544 @@
 ## 目次
 1. [サブエージェントとは](#サブエージェントとは)
 2. [メリット](#メリット)
-3. [アーキテクチャパターン](#アーキテクチャパターン)
-4. [実装方法](#実装方法)
+3. [サブエージェントの定義方法](#サブエージェントの定義方法)
+4. [AgentDefinition設定](#agentdefinition設定)
 5. [実装例](#実装例)
-6. [ベストプラクティス](#ベストプラクティス)
-7. [応用パターン](#応用パターン)
+6. [ツール制限](#ツール制限)
+7. [SDK統合パターン](#sdk統合パターン)
+8. [ベストプラクティス](#ベストプラクティス)
+9. [応用パターン](#応用パターン)
 
 ---
 
 ## サブエージェントとは
 
-**サブエージェント**は、特定の役割や専門性を持つAIエージェントのことです。各サブエージェントは独自のシステムプロンプトを持ち、特定のタスクに特化した動作をします。
+**サブエージェント**は、メインエージェントによってオーケストレーションされる、特定の専門性を持つAIエージェントです。Claude Agent SDKでは、コンテキスト管理と並列化のためにサブエージェントを使用します。
 
 ### 基本概念
 
-- **親エージェント（オーケストレーター）**: タスクを分解し、適切なサブエージェントに委譲する役割
+- **メインエージェント（オーケストレーター）**: タスクを分解し、適切なサブエージェントに委譲する役割
 - **サブエージェント（ワーカー）**: 特定の専門タスクを実行する役割
 - **独立したコンテキスト**: 各サブエージェントは独自の会話コンテキストを持つ
 - **並列実行**: 複数のサブエージェントを同時に実行可能
-
-### 従来のエージェント vs サブエージェント
-
-| 特徴 | 従来のエージェント | サブエージェントパターン |
-|------|-------------------|------------------------|
-| 役割 | 汎用的 | 専門化された複数の役割 |
-| コンテキスト | 単一の会話履歴 | 各エージェントが独立したコンテキスト |
-| 並列処理 | 順次実行 | 並列実行が可能 |
-| 複雑さ | シンプル | タスク分解により複雑なタスクを処理 |
+- **自動起動**: SDKが `description` フィールドに基づいて適切なサブエージェントを自動的に選択
 
 ---
 
 ## メリット
 
-### 1. 専門性の向上
-各サブエージェントは特定のタスクに最適化されたシステムプロンプトを持つため、より高品質な結果が得られます。
+### 1. コンテキスト管理
 
-```typescript
-// 例: ライター専門のサブエージェント
-const writerAgent = {
-  name: 'writer',
-  systemPrompt: 'あなたは創造的なライターです。魅力的で読みやすいコンテンツを作成します。'
-};
-```
+各サブエージェントは独立したコンテキストを持つため、情報過多を防ぎ、集中的なインタラクションを維持できます。この分離により、専門的なタスクが無関係な詳細でメイン会話を汚染することがありません。
 
-### 2. コンテキストの分離
-各サブエージェントが独立したコンテキストを持つため、メイン会話の文脈を汚染しません。
+**例**: research-assistant サブエージェントは、数十のファイルやドキュメントページを探索できますが、中間的な検索結果をすべてメイン会話に表示せず、関連する発見のみを返します。
 
-### 3. 並列実行による高速化
-複数のサブエージェントを同時に実行することで、全体の処理時間を大幅に短縮できます。
+### 2. 並列化
 
-```typescript
-// 3つのサブエージェントを並列実行
-const results = await Promise.all([
-  writerAgent.execute(task1),
-  reviewerAgent.execute(task2),
-  analystAgent.execute(task3),
-]);
-```
+複数のサブエージェントを同時実行することで、複雑なワークフローを劇的に高速化できます。
 
-### 4. タスクの明確化
-複雑なタスクを小さな専門タスクに分解することで、各ステップが明確になります。
+**例**: コードレビュー中、style-checker、security-scanner、test-coverage サブエージェントを同時に実行し、レビュー時間を数分から数秒に短縮できます。
 
-### 5. 再利用性
-一度定義したサブエージェントは、様々な場面で再利用できます。
+### 3. 専門的な指示と知識
+
+各サブエージェントは、特定の専門知識、ベストプラクティス、制約を持つカスタマイズされたシステムプロンプトを持つことができます。
+
+**例**: database-migration サブエージェントは、SQLのベストプラクティス、ロールバック戦略、データ整合性チェックに関する詳細な知識を持つことができますが、メインエージェントの指示には不要なノイズとなります。
+
+### 4. ツール制限
+
+サブエージェントは特定のツールに制限でき、意図しないアクションのリスクを軽減できます。
+
+**例**: doc-reviewer サブエージェントは Read と Grep ツールのみにアクセスできるようにし、ドキュメントファイルを分析できても誤って変更しないようにします。
 
 ---
 
-## アーキテクチャパターン
+## サブエージェントの定義方法
 
-### パターン1: オーケストレーター・ワーカーパターン
+Claude Agent SDKでサブエージェントを定義する方法は2つあります：
 
-最も一般的なパターン。親エージェントがタスクを分解し、サブエージェント（ワーカー）に委譲します。
+### 方法1: プログラマティック定義（推奨）
 
-```
-┌─────────────────────────┐
-│  親エージェント          │
-│  (オーケストレーター)    │
-└───────────┬─────────────┘
-            │
-    ┌───────┼───────┐
-    │       │       │
-    ▼       ▼       ▼
-┌──────┐ ┌──────┐ ┌──────┐
-│ Sub1 │ │ Sub2 │ │ Sub3 │
-└──────┘ └──────┘ └──────┘
-```
-
-### パターン2: パイプラインパターン
-
-サブエージェントを順次実行し、前のエージェントの出力を次のエージェントの入力とします。
-
-```
-┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐
-│ Sub1 │ -> │ Sub2 │ -> │ Sub3 │ -> │ 結果 │
-└──────┘    └──────┘    └──────┘    └──────┘
-```
-
-### パターン3: 階層型パターン
-
-サブエージェントがさらに別のサブエージェントを管理する階層構造。
-
-```
-        ┌──────────┐
-        │  親      │
-        └────┬─────┘
-             │
-      ┌──────┼──────┐
-      │      │      │
-   ┌──▼─┐ ┌─▼──┐ ┌─▼──┐
-   │Sub1│ │Sub2│ │Sub3│
-   └──┬─┘ └────┘ └────┘
-      │
-   ┌──┼──┐
-   │  │  │
- ┌─▼┐┌▼─┐┌▼─┐
- │1a││1b││1c│
- └──┘└──┘└──┘
-```
-
----
-
-## 実装方法
-
-### ステップ1: SubAgentクラスの作成
-
-各サブエージェントは独自のシステムプロンプトを持ちます。
+`query()` 関数の `agents` パラメータを使用してコード内で直接定義します：
 
 ```typescript
-class SubAgent {
-  private client: Anthropic;
-  private config: SubAgentConfig;
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
-  constructor(client: Anthropic, config: SubAgentConfig) {
-    this.client = client;
-    this.config = config;
-  }
+const result = query({
+  prompt: "認証モジュールのセキュリティ問題をレビューしてください",
+  options: {
+    agents: {
+      'code-reviewer': {
+        description: 'エキスパートコードレビュー専門家。品質、セキュリティ、保守性のレビューに使用。',
+        prompt: `あなたはセキュリティ、パフォーマンス、ベストプラクティスに精通したコードレビュー専門家です。
 
-  async execute(userPrompt: string): Promise<string> {
-    const response = await this.client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 4096,
-      system: this.config.systemPrompt, // 専門性を定義
-      messages: [{ role: 'user', content: userPrompt }],
-    });
+コードレビュー時:
+- セキュリティの脆弱性を特定
+- パフォーマンス問題をチェック
+- コーディング標準への準拠を確認
+- 具体的な改善提案を行う
 
-    const textContent = response.content.find(
-      (block): block is Anthropic.TextBlock => block.type === 'text'
-    );
+徹底的に、しかし簡潔なフィードバックを提供してください。`,
+        tools: ['Read', 'Grep', 'Glob'],
+        model: 'sonnet'
+      },
+      'test-runner': {
+        description: 'テストスイートを実行・分析。テスト実行とカバレッジ分析に使用。',
+        prompt: `あなたはテスト実行の専門家です。テストを実行し、結果を明確に分析します。
 
-    return textContent?.text || '';
-  }
-}
-```
-
-### ステップ2: オーケストレーターの作成
-
-サブエージェントを管理し、タスクを委譲します。
-
-```typescript
-class SubAgentOrchestrator {
-  private client: Anthropic;
-  private subAgents: Map<string, SubAgent>;
-
-  constructor(apiKey: string) {
-    this.client = new Anthropic({ apiKey });
-    this.subAgents = new Map();
-  }
-
-  // サブエージェントを登録
-  registerSubAgent(config: SubAgentConfig): void {
-    const subAgent = new SubAgent(this.client, config);
-    this.subAgents.set(config.name, subAgent);
-  }
-
-  // 単一サブエージェントに委譲
-  async delegateToSubAgent(agentName: string, prompt: string): Promise<string> {
-    const subAgent = this.subAgents.get(agentName);
-    if (!subAgent) {
-      throw new Error(`サブエージェント "${agentName}" が見つかりません`);
+焦点:
+- テストコマンドの実行
+- テスト出力の分析
+- 失敗したテストの特定
+- 失敗の修正案を提示`,
+        tools: ['Bash', 'Read', 'Grep'],
+      }
     }
-    return await subAgent.execute(prompt);
   }
+});
 
-  // 並列実行
-  async delegateParallel(tasks: SubAgentTask[]): Promise<SubAgentResult[]> {
-    const promises = tasks.map(async (task) => {
-      const result = await this.delegateToSubAgent(task.agentName, task.prompt);
-      return { agentName: task.agentName, result };
-    });
-    return await Promise.all(promises);
-  }
+for await (const message of result) {
+  console.log(message);
 }
 ```
 
-### ステップ3: サブエージェントの登録
+### 方法2: ファイルシステムベース定義（代替）
 
-専門性を持つサブエージェントを登録します。
+指定されたディレクトリにマークダウンファイルを配置します：
+
+- **プロジェクトレベル**: `.claude/agents/*.md` - 現在のプロジェクトでのみ利用可能
+- **ユーザーレベル**: `~/.claude/agents/*.md` - すべてのプロジェクトで利用可能
+
+各サブエージェントは、YAMLフロントマターを持つマークダウンファイルです：
+
+```markdown
+---
+name: code-reviewer
+description: エキスパートコードレビュー専門家。品質、セキュリティ、保守性のレビューに使用。
+tools: Read, Grep, Glob, Bash
+---
+
+サブエージェントのシステムプロンプトをここに記述します。
+これはサブエージェントの役割、能力、問題解決のアプローチを定義します。
+```
+
+**注意**: プログラマティックに定義されたエージェント（`agents` パラメータ経由）は、同じ名前のファイルシステムベースのエージェントよりも優先されます。
+
+---
+
+## AgentDefinition設定
+
+### 設定項目
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `description` | string | **必須** | このエージェントをいつ使用するかの自然言語での説明。SDKがエージェントを自動起動する際に使用されます |
+| `prompt` | string | **必須** | エージェントのシステムプロンプト。役割と動作を定義します |
+| `tools` | string[] | オプション | 許可されたツール名の配列。省略した場合、すべてのツールを継承します |
+| `model` | 'sonnet' \| 'opus' \| 'haiku' \| 'inherit' | オプション | このエージェントのモデルオーバーライド。省略した場合、メインモデルがデフォルトです |
+
+### 設定例
 
 ```typescript
-const orchestrator = new SubAgentOrchestrator(process.env.ANTHROPIC_API_KEY!);
+const agentConfig = {
+  'security-auditor': {
+    // 必須: いつこのエージェントを使用するかを明確に記述
+    description: 'セキュリティ監査専門家。PROACTIVELY使用してセキュリティ脆弱性をチェック。',
 
-// ライターエージェント
-orchestrator.registerSubAgent({
-  name: 'writer',
-  systemPrompt: 'あなたは創造的なライターです。魅力的で読みやすいコンテンツを作成します。',
-});
+    // 必須: エージェントの専門性と役割を定義
+    prompt: `あなたはセキュリティ監査の専門家です。コードとシステムをセキュリティの観点から徹底的に分析します。
 
-// レビュアーエージェント
-orchestrator.registerSubAgent({
-  name: 'reviewer',
-  systemPrompt: 'あなたは厳格なレビュアーです。コンテンツを批判的に分析し、改善点を指摘します。',
-});
+重点項目:
+- SQL インジェクションのリスク
+- XSS (クロスサイトスクリプティング) の脆弱性
+- 認証・認可の問題
+- 機密データの露出
+- 安全でない依存関係
 
-// アナリストエージェント
-orchestrator.registerSubAgent({
-  name: 'analyst',
-  systemPrompt: 'あなたはデータアナリストです。情報を分析し、重要なインサイトを抽出します。',
-});
+各発見について、リスクレベルと修正方法を提供してください。`,
+
+    // オプション: ツールを制限（読み取り専用）
+    tools: ['Read', 'Grep', 'Glob'],
+
+    // オプション: より高性能なモデルを使用
+    model: 'opus'
+  }
+};
 ```
 
 ---
 
 ## 実装例
 
-### 例1: 単一サブエージェントへの委譲
+### 例1: 基本的な使用方法
 
 ```typescript
-const result = await orchestrator.delegateToSubAgent(
-  'writer',
-  '人工知能の未来について、300文字程度のブログ記事を書いてください。'
-);
-console.log(result);
+import { query } from '@anthropic-ai/claude-agent-sdk';
+
+const result = query({
+  prompt: "データベース移行スクリプトをレビューしてください",
+  options: {
+    agents: {
+      'db-expert': {
+        description: 'データベースとSQL専門家。DB関連タスクに使用。',
+        prompt: 'あなたはデータベースとSQLの専門家です。SQLスクリプト、移行、最適化を分析します。',
+        tools: ['Read', 'Grep', 'Glob']
+      }
+    }
+  }
+});
+
+for await (const message of result) {
+  console.log(message);
+}
 ```
 
-### 例2: 並列実行
-
-複数のサブエージェントを同時に実行し、結果を統合します。
+### 例2: 複数のサブエージェントを定義
 
 ```typescript
-const tasks = [
-  {
-    agentName: 'writer',
-    prompt: 'リモートワークの利点について100文字で説明してください。',
-  },
-  {
-    agentName: 'analyst',
-    prompt: 'リモートワークの導入率の傾向について分析してください。',
-  },
-  {
-    agentName: 'reviewer',
-    prompt: 'リモートワークの課題点を3つ挙げてください。',
-  },
-];
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
-const results = await orchestrator.delegateParallel(tasks);
-results.forEach((result) => {
-  console.log(`[${result.agentName}]: ${result.result}`);
+const result = query({
+  prompt: "認証システムの完全なレビューを実施してください",
+  options: {
+    agents: {
+      'security-reviewer': {
+        description: 'セキュリティコードレビューアー。脆弱性検出に使用。',
+        prompt: `あなたは厳格なセキュリティレビューアーです。
+
+重点:
+- 認証の脆弱性
+- セッション管理の問題
+- 暗号化の実装
+- アクセス制御`,
+        tools: ['Read', 'Grep', 'Glob'],
+        model: 'sonnet'
+      },
+      'performance-analyzer': {
+        description: 'パフォーマンス最適化専門家。コード変更がパフォーマンスに影響する可能性がある場合にPROACTIVELYに使用。',
+        prompt: `あなたはパフォーマンス最適化の専門家です。
+
+分析項目:
+- クエリの効率
+- N+1問題
+- キャッシング機会
+- リソース使用`,
+        tools: ['Read', 'Bash', 'Grep', 'Glob']
+      },
+      'test-coverage': {
+        description: 'テストカバレッジ分析専門家。テスト実行とカバレッジ分析に使用。',
+        prompt: 'あなたはテストカバレッジの専門家です。テストの完全性とカバレッジを評価します。',
+        tools: ['Bash', 'Read', 'Grep']
+      }
+    }
+  }
+});
+
+// SDKが自動的に適切なサブエージェントを起動します
+for await (const message of result) {
+  console.log(message);
+}
+```
+
+### 例3: 動的なエージェント設定
+
+```typescript
+import { query, type AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
+
+function createSecurityAgent(level: 'basic' | 'strict'): AgentDefinition {
+  return {
+    description: 'セキュリティコードレビューアー',
+    prompt: `あなたは${level === 'strict' ? '厳格な' : 'バランスの取れた'}セキュリティレビューアーです...`,
+    tools: ['Read', 'Grep', 'Glob'],
+    model: level === 'strict' ? 'opus' : 'sonnet'
+  };
+}
+
+const result = query({
+  prompt: "このPRのセキュリティ問題をレビューしてください",
+  options: {
+    agents: {
+      'security-reviewer': createSecurityAgent('strict')
+    }
+  }
 });
 ```
 
-### 例3: 自動オーケストレーション
+---
 
-親エージェントがユーザーのリクエストを分析し、自動的にタスクを分解して委譲します。
+## ツール制限
+
+サブエージェントは `tools` フィールドを使用してツールアクセスを制限できます：
+
+### ツール制限のオプション
+
+1. **フィールドを省略** - エージェントはすべての利用可能なツールを継承（デフォルト）
+2. **ツールを指定** - エージェントはリストされたツールのみ使用可能
+
+### 読み取り専用分析エージェントの例
 
 ```typescript
-const result = await orchestrator.orchestrate(
-  'クラウドコンピューティングについて詳しく解説し、その内容をレビューして、最後に要約してください。'
-);
-console.log(result);
+const result = query({
+  prompt: "このコードベースのアーキテクチャを分析してください",
+  options: {
+    agents: {
+      'code-analyzer': {
+        description: '静的コード分析とアーキテクチャレビュー',
+        prompt: `あなたはコードアーキテクチャアナリストです。コード構造を分析し、
+パターンを特定し、変更を加えずに改善を提案します。`,
+        tools: ['Read', 'Grep', 'Glob']  // 書き込みや実行権限なし
+      }
+    }
+  }
+});
 ```
 
-内部処理:
-1. 親エージェントがリクエストを分析
-2. 実行計画を作成（どのサブエージェントに何を委譲するか）
-3. サブエージェントを並列または順次実行
-4. 結果を統合して最終的な回答を生成
+### よくあるツールの組み合わせ
+
+#### 読み取り専用エージェント（分析、レビュー）
+
+```typescript
+tools: ['Read', 'Grep', 'Glob']
+```
+
+#### テスト実行エージェント
+
+```typescript
+tools: ['Bash', 'Read', 'Grep']
+```
+
+#### コード修正エージェント
+
+```typescript
+tools: ['Read', 'Edit', 'Write', 'Grep', 'Glob']
+```
+
+#### フルアクセスエージェント
+
+```typescript
+// tools を省略してすべてのツールを継承
+// または
+tools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob']
+```
+
+---
+
+## SDK統合パターン
+
+### パターン1: 自動起動
+
+SDKはタスクのコンテキストに基づいて適切なサブエージェントを自動的に起動します。エージェントの `description` フィールドで、いつ使用されるべきかを明確に示してください：
+
+```typescript
+const result = query({
+  prompt: "APIレイヤーのデータベースクエリを最適化してください",
+  options: {
+    agents: {
+      'performance-optimizer': {
+        description: 'コード変更がパフォーマンスに影響する可能性がある場合にPROACTIVELYに使用。最適化タスクには必須。',
+        prompt: 'あなたはパフォーマンス最適化の専門家です...',
+        tools: ['Read', 'Edit', 'Bash', 'Grep'],
+        model: 'sonnet'
+      }
+    }
+  }
+});
+```
+
+**重要なポイント**:
+- `description` に "PROACTIVELY" や "MUST BE USED" などのキーワードを含めると、SDKがより積極的にエージェントを起動します
+- タスクの種類を明確に記述（例: "最適化タスク"、"セキュリティレビュー"、"テスト実行"）
+
+### パターン2: 明示的な起動
+
+ユーザーはプロンプト内で特定のサブエージェントをリクエストできます：
+
+```typescript
+const result = query({
+  prompt: "code-reviewerエージェントを使用して認証モジュールをチェックしてください",
+  options: {
+    agents: {
+      'code-reviewer': {
+        description: 'エキスパートコードレビュー専門家',
+        prompt: 'あなたはセキュリティ重視のコードレビューアーです...',
+        tools: ['Read', 'Grep', 'Glob']
+      }
+    }
+  }
+});
+```
+
+### パターン3: 条件付き起動
+
+環境やコンテキストに基づいてエージェントを動的に設定：
+
+```typescript
+import { query, type AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
+
+const isProd = process.env.NODE_ENV === 'production';
+
+const agents: Record<string, AgentDefinition> = {
+  'code-reviewer': {
+    description: 'コードレビュー専門家',
+    prompt: 'あなたはコードレビューアーです...',
+    tools: ['Read', 'Grep', 'Glob'],
+    model: isProd ? 'opus' : 'sonnet'  // 本番環境ではより高性能なモデル
+  }
+};
+
+// 開発環境でのみデバッグエージェントを追加
+if (!isProd) {
+  agents['debugger'] = {
+    description: 'デバッグ支援専門家',
+    prompt: 'あなたはデバッグの専門家です...',
+    tools: ['Bash', 'Read', 'Grep']
+  };
+}
+
+const result = query({
+  prompt: "コードをレビューしてください",
+  options: { agents }
+});
+```
 
 ---
 
 ## ベストプラクティス
 
-### 1. 明確な役割分担
+### 1. 明確で具体的なdescriptionを書く
 
-各サブエージェントの責務を明確にし、システムプロンプトで具体的に定義します。
+`description` はSDKがいつエージェントを起動するかを判断する重要な要素です。
 
 ```typescript
 // 良い例
-systemPrompt: 'あなたはPythonコードレビュアーです。コードの品質、パフォーマンス、セキュリティの観点から分析してください。'
+description: 'Pythonコードのセキュリティレビュー専門家。認証、暗号化、SQL インジェクション、XSS の脆弱性をチェックする際に使用。'
 
 // 悪い例
-systemPrompt: 'あなたはアシスタントです。'
+description: 'コードレビューをします'
 ```
 
-### 2. 入出力フォーマットの統一
+### 2. promptで役割と責任を明確に定義
 
-サブエージェント間でデータをやり取りする際は、フォーマットを統一します。
+エージェントの専門性、焦点、出力形式を具体的に記述します。
 
 ```typescript
-// JSON形式で出力を指定
-systemPrompt: `あなたはアナリストです。
-分析結果を以下のJSON形式で返してください：
+// 良い例
+prompt: `あなたはTypeScriptセキュリティ監査の専門家です。
+
+分析項目:
+1. 型安全性の問題
+2. nullチェックの欠如
+3. 安全でないanyの使用
+4. 外部入力の検証
+
+各問題について:
+- 重大度レベル（Critical/High/Medium/Low）
+- 場所（ファイル:行番号）
+- 説明
+- 修正案
+
+JSON形式で結果を返してください。`
+
+// 悪い例
+prompt: 'あなたはアシスタントです。コードをレビューしてください。'
+```
+
+### 3. 適切なツール制限を設定
+
+最小権限の原則に従い、必要なツールのみを許可します。
+
+```typescript
+// 分析専用エージェント
 {
-  "summary": "要約",
-  "insights": ["インサイト1", "インサイト2"],
-  "recommendation": "推奨事項"
-}`;
-```
+  tools: ['Read', 'Grep', 'Glob']  // 読み取りのみ
+}
 
-### 3. エラーハンドリング
+// テスト実行エージェント
+{
+  tools: ['Bash', 'Read', 'Grep']  // 実行と読み取り
+}
 
-サブエージェントの失敗に備えて、適切なエラーハンドリングを実装します。
-
-```typescript
-try {
-  const result = await subAgent.execute(prompt);
-  return { success: true, result };
-} catch (error) {
-  return {
-    success: false,
-    error: error instanceof Error ? error.message : String(error)
-  };
+// コード修正エージェント
+{
+  tools: ['Read', 'Edit', 'Write', 'Grep', 'Glob']  // 修正権限あり
 }
 ```
 
-### 4. タイムアウトの設定
+### 4. エラーハンドリング
 
-長時間実行されるタスクにはタイムアウトを設定します。
+サブエージェントの実行には適切なエラーハンドリングを実装します。
 
 ```typescript
-const timeout = 30000; // 30秒
-const result = await Promise.race([
-  subAgent.execute(prompt),
-  new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Timeout')), timeout)
-  ),
-]);
+try {
+  const result = query({
+    prompt: "コードをレビュー",
+    options: {
+      agents: {
+        'reviewer': {
+          description: 'レビュー専門家',
+          prompt: 'レビューを実施...',
+          tools: ['Read', 'Grep']
+        }
+      }
+    }
+  });
+
+  for await (const message of result) {
+    console.log(message);
+  }
+} catch (error) {
+  console.error('サブエージェント実行エラー:', error);
+  // フォールバック処理
+}
 ```
 
 ### 5. ログとモニタリング
 
-各サブエージェントの実行状況をログに記録します。
+エージェントの実行状況を追跡します。
 
 ```typescript
-console.log(`[${agentName}] タスク開始: ${prompt.substring(0, 50)}...`);
 const startTime = Date.now();
-const result = await subAgent.execute(prompt);
+
+const result = query({
+  prompt: "タスクを実行",
+  options: {
+    agents: {
+      'task-agent': {
+        description: 'タスク実行専門家',
+        prompt: 'タスクを実行...',
+        tools: ['Read', 'Bash']
+      }
+    }
+  }
+});
+
+for await (const message of result) {
+  console.log(`[${new Date().toISOString()}] ${message}`);
+}
+
 const duration = Date.now() - startTime;
-console.log(`[${agentName}] 完了 (${duration}ms)`);
+console.log(`実行時間: ${duration}ms`);
 ```
 
-### 6. キャッシングの活用
+### 6. モデル選択の最適化
 
-同じプロンプトを繰り返し実行する場合、Anthropic SDKのプロンプトキャッシング機能を活用します。
+タスクの複雑さに応じて適切なモデルを選択します。
 
 ```typescript
-const response = await this.client.messages.create({
-  model: 'claude-3-5-sonnet-20241022',
-  max_tokens: 4096,
-  system: [
-    {
-      type: 'text',
-      text: this.config.systemPrompt,
-      cache_control: { type: 'ephemeral' }, // キャッシング有効化
-    },
-  ],
-  messages: [{ role: 'user', content: userPrompt }],
-});
+const agents = {
+  'simple-formatter': {
+    description: 'コードフォーマット専門家',
+    prompt: 'コードをフォーマット...',
+    tools: ['Read', 'Edit'],
+    model: 'haiku'  // シンプルなタスクには高速なモデル
+  },
+  'architecture-reviewer': {
+    description: 'アーキテクチャレビュー専門家',
+    prompt: '複雑なアーキテクチャを分析...',
+    tools: ['Read', 'Grep', 'Glob'],
+    model: 'opus'  // 複雑なタスクには高性能なモデル
+  }
+};
 ```
 
 ---
@@ -377,107 +549,160 @@ const response = await this.client.messages.create({
 
 ### パターンA: 反復改善パターン
 
-サブエージェントが相互にフィードバックを与え合い、結果を改善します。
+複数のエージェントが協力して結果を改善します。
 
 ```typescript
-// 1. ライターが初稿を作成
-const draft = await orchestrator.delegateToSubAgent('writer', 'ブログ記事を書いて');
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
-// 2. レビュアーが改善点を指摘
-const feedback = await orchestrator.delegateToSubAgent('reviewer',
-  `以下の記事をレビューしてください：\n${draft}`
-);
-
-// 3. ライターが改訂版を作成
-const revised = await orchestrator.delegateToSubAgent('writer',
-  `以下のフィードバックに基づいて記事を改訂してください：\n${feedback}\n\n元の記事：\n${draft}`
-);
+const result = query({
+  prompt: `以下のプロセスで記事を作成してください:
+1. writerエージェントで初稿を作成
+2. reviewerエージェントでフィードバック
+3. writerエージェントで改訂版を作成`,
+  options: {
+    agents: {
+      'writer': {
+        description: '創造的なライター。コンテンツ作成に使用。',
+        prompt: 'あなたは創造的なライターです。魅力的で読みやすいコンテンツを作成します。',
+        tools: ['Read', 'Write']
+      },
+      'reviewer': {
+        description: 'コンテンツレビュアー。品質向上のためのフィードバックを提供。',
+        prompt: 'あなたは厳格なレビュアーです。コンテンツを批判的に分析し、具体的な改善点を指摘します。',
+        tools: ['Read']
+      }
+    }
+  }
+});
 ```
 
-### パターンB: 投票パターン
+### パターンB: 専門家パネルパターン
 
-複数のサブエージェントが同じタスクを実行し、最良の結果を選択します。
+複数の専門家エージェントが異なる観点から分析します。
 
 ```typescript
-// 3つのライターが異なるアプローチで記事を作成
-const proposals = await orchestrator.delegateParallel([
-  { agentName: 'writer1', prompt: 'フォーマルな記事を書いて' },
-  { agentName: 'writer2', prompt: 'カジュアルな記事を書いて' },
-  { agentName: 'writer3', prompt: '技術的な記事を書いて' },
-]);
+const result = query({
+  prompt: "新機能の設計を複数の観点からレビューしてください",
+  options: {
+    agents: {
+      'security-expert': {
+        description: 'セキュリティ専門家。セキュリティリスクを評価。',
+        prompt: `あなたはセキュリティ専門家です。
 
-// レビュアーが最良の案を選択
-const best = await orchestrator.delegateToSubAgent('reviewer',
-  `以下の3つの記事案から最良のものを選び、理由を説明してください：\n${JSON.stringify(proposals)}`
-);
+評価項目:
+- 認証・認可の実装
+- データ保護
+- セキュリティベストプラクティス`,
+        tools: ['Read', 'Grep', 'Glob']
+      },
+      'performance-expert': {
+        description: 'パフォーマンス専門家。パフォーマンスへの影響を評価。',
+        prompt: `あなたはパフォーマンス専門家です。
+
+評価項目:
+- レスポンスタイム
+- リソース使用
+- スケーラビリティ`,
+        tools: ['Read', 'Grep', 'Glob']
+      },
+      'ux-expert': {
+        description: 'UX専門家。ユーザーエクスペリエンスを評価。',
+        prompt: `あなたはUX専門家です。
+
+評価項目:
+- ユーザビリティ
+- アクセシビリティ
+- ユーザーフロー`,
+        tools: ['Read']
+      }
+    }
+  }
+});
 ```
 
-### パターンC: 専門家パネルパターン
+### パターンC: パイプラインパターン
 
-複数の専門家エージェントが議論し、合意形成します。
+タスクを順次処理します。
 
 ```typescript
-const experts = ['security_expert', 'performance_expert', 'ux_expert'];
+const result = query({
+  prompt: `以下の順序で処理してください:
+1. data-extractorでデータを抽出
+2. analyzerで分析
+3. report-generatorでレポート生成`,
+  options: {
+    agents: {
+      'data-extractor': {
+        description: 'データ抽出専門家。ソースからデータを取得。',
+        prompt: 'あなたはデータ抽出の専門家です。様々なソースからデータを効率的に抽出します。',
+        tools: ['Read', 'Grep', 'Bash']
+      },
+      'analyzer': {
+        description: 'データ分析専門家。抽出されたデータを分析。',
+        prompt: 'あなたはデータアナリストです。データから重要なインサイトを抽出します。',
+        tools: ['Read']
+      },
+      'report-generator': {
+        description: 'レポート生成専門家。分析結果をレポート化。',
+        prompt: 'あなたはレポート作成の専門家です。分析結果を分かりやすいレポートにまとめます。',
+        tools: ['Write', 'Read']
+      }
+    }
+  }
+});
+```
 
-// 各専門家が意見を述べる
-const opinions = await orchestrator.delegateParallel(
-  experts.map(expert => ({
-    agentName: expert,
-    prompt: '新機能の設計について意見をください',
-  }))
-);
+### パターンD: 条件分岐パターン
 
-// モデレーターが意見を統合
-const consensus = await orchestrator.delegateToSubAgent('moderator',
-  `以下の専門家の意見を統合して、最終的な推奨事項を作成してください：\n${JSON.stringify(opinions)}`
-);
+状況に応じて異なるエージェントを使用します。
+
+```typescript
+const result = query({
+  prompt: "エラーログを分析し、適切なエージェントで対処してください",
+  options: {
+    agents: {
+      'error-classifier': {
+        description: 'エラー分類専門家。PROACTIVELY使用してエラーの種類を判定。',
+        prompt: `あなたはエラー分類の専門家です。エラーログを分析し、以下のカテゴリに分類します:
+- SECURITY: セキュリティ関連
+- PERFORMANCE: パフォーマンス関連
+- BUG: ロジックバグ
+- CONFIG: 設定エラー`,
+        tools: ['Read', 'Grep']
+      },
+      'security-fixer': {
+        description: 'セキュリティ問題修正専門家。SECURITYエラーの修正に使用。',
+        prompt: 'あなたはセキュリティ問題の修正専門家です...',
+        tools: ['Read', 'Edit', 'Grep']
+      },
+      'performance-fixer': {
+        description: 'パフォーマンス問題修正専門家。PERFORMANCEエラーの修正に使用。',
+        prompt: 'あなたはパフォーマンス問題の修正専門家です...',
+        tools: ['Read', 'Edit', 'Bash']
+      },
+      'bug-fixer': {
+        description: 'バグ修正専門家。BUGエラーの修正に使用。',
+        prompt: 'あなたはバグ修正の専門家です...',
+        tools: ['Read', 'Edit', 'Write']
+      }
+    }
+  }
+});
 ```
 
 ---
 
-## サンプルコード
+## SDKの動作
 
-完全な実装例は `src/sub-agent-example.ts` を参照してください。
+Claude Agent SDKを使用する際、サブエージェントは以下のように動作します：
 
-### 実行方法
+1. **プログラマティックエージェントの読み込み**: `options` の `agents` パラメータからエージェントを読み込み
+2. **ファイルシステムエージェントの自動検出**: `.claude/agents/` ディレクトリからエージェントを検出（オーバーライドされていない場合）
+3. **自動起動**: タスクマッチングとエージェントの `description` に基づいて自動的に起動
+4. **専門化されたプロンプトとツール制限の使用**: 各エージェントの設定を適用
+5. **独立したコンテキストの維持**: 各サブエージェント起動ごとに独立したコンテキストを保持
 
-```bash
-# 依存関係のインストール
-npm install
-
-# 環境変数の設定
-echo "ANTHROPIC_API_KEY=your-api-key" > .env
-
-# サンプル実行
-npx ts-node src/sub-agent-example.ts
-```
-
-### 期待される出力
-
-```
-✅ サブエージェント登録: writer
-✅ サブエージェント登録: reviewer
-✅ サブエージェント登録: analyst
-✅ サブエージェント登録: summarizer
-
-📌 例1: 単一サブエージェントへの委譲
-🤖 [writer] タスク実行開始
-✅ [writer] タスク完了 (350文字)
-
-📌 例2: 複数サブエージェントへの並列委譲
-🚀 並列実行開始: 3個のタスク
-🤖 [writer] タスク実行開始
-🤖 [analyst] タスク実行開始
-🤖 [reviewer] タスク実行開始
-✨ 並列実行完了: 3個の結果
-
-📌 例3: 自動オーケストレーション
-🎯 オーケストレーター起動
-📊 実行計画: {...}
-✅ 計画確定: 3個のタスク
-⚡ 並列実行: はい
-✨ オーケストレーション完了
-```
+**優先順位**: プログラマティックに定義されたエージェント（`agents` パラメータ経由）は、同じ名前のファイルシステムベースのエージェントよりも優先されます。
 
 ---
 
@@ -485,13 +710,15 @@ npx ts-node src/sub-agent-example.ts
 
 サブエージェントパターンを使用することで、以下のメリットが得られます：
 
-1. **専門性**: 各エージェントが特定のタスクに最適化
-2. **並列性**: 複数のタスクを同時実行して高速化
-3. **明確性**: タスクの分解により、各ステップが明確
-4. **再利用性**: サブエージェントを様々な場面で再利用
-5. **スケーラビリティ**: 新しいサブエージェントを簡単に追加
+1. **コンテキスト管理**: 独立したコンテキストで情報過多を防止
+2. **並列化**: 複数タスクの同時実行で高速化
+3. **専門性**: 各エージェントが特定のタスクに最適化
+4. **ツール制限**: 最小権限の原則でリスク軽減
+5. **自動化**: SDKが適切なエージェントを自動選択
+6. **再利用性**: 定義したエージェントを様々な場面で再利用
+7. **スケーラビリティ**: 新しいサブエージェントを簡単に追加
 
-このパターンは、複雑なAIアプリケーションを構築する際の強力な設計手法です。
+Claude Agent SDKのサブエージェント機能は、複雑なAIアプリケーションを構築する際の強力な設計手法です。
 
 ---
 
@@ -500,7 +727,7 @@ npx ts-node src/sub-agent-example.ts
 - [TOOLS_CATALOG.md](./TOOLS_CATALOG.md) - ツール使用の基礎
 - [CLAUDE_SDK_WORKDIR.md](./CLAUDE_SDK_WORKDIR.md) - サンドボックス化されたエージェント
 - [TODO_TOOL_GUIDE.md](./TODO_TOOL_GUIDE.md) - タスク管理ツール
-- [Anthropic公式ドキュメント](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
+- [Claude Agent SDK公式ドキュメント - Subagents](https://docs.claude.com/en/api/agent-sdk/subagents)
 
 ---
 
