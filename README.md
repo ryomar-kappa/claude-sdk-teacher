@@ -12,11 +12,13 @@ claude-sdk-teacher/
 │   ├── todo-manager.ts    # Todoマネージャー実装
 │   ├── todo-agent.ts      # Todoツール統合エージェント
 │   ├── workdir-example.ts # 作業ディレクトリ制御の実装例
-│   └── sandboxed-agent.ts # サンドボックス化エージェント実装
+│   ├── sandboxed-agent.ts # サンドボックス化エージェント実装
+│   └── sub-agent-example.ts # サブエージェントパターン実装
 ├── TOOLS_CATALOG.md           # ツールカタログ（813行）
 ├── TODO_TOOL_GUIDE.md         # TodoWriteツール完全ガイド
 ├── WORKING_DIRECTORY_GUIDE.md # 作業ディレクトリ完全ガイド
 ├── CLAUDE_SDK_WORKDIR.md      # Claude SDKで固定ディレクトリで作業させる方法
+├── SUB_AGENT_GUIDE.md         # サブエージェント実装完全ガイド
 ├── package.json
 ├── tsconfig.json
 └── .env.example
@@ -53,6 +55,9 @@ npm run demo:workdir
 
 # サンドボックス化されたエージェント（APIキー必須）
 npm run demo:sandboxed
+
+# サブエージェントパターンのデモ（APIキー必須）
+npx ts-node src/sub-agent-example.ts
 ```
 
 ## 📖 ドキュメント
@@ -94,6 +99,17 @@ Claude SDKで実行ディレクトリと違うディレクトリで作業させ�
 - Claude Agentへのファイル操作ツール統合
 - 実用的な使用例とベストプラクティス
 - 複数エージェントの並列実行パターン
+
+### [SUB_AGENT_GUIDE.md](./SUB_AGENT_GUIDE.md)
+サブエージェントパターンの完全実装ガイド
+
+**内容:**
+- サブエージェントの概念とメリット
+- オーケストレーター・ワーカーパターン
+- 並列実行と自動タスク分解
+- 完全な実装例（SubAgent, SubAgentOrchestrator）
+- 応用パターン（反復改善、投票、専門家パネル）
+- ベストプラクティスとコード例
 
 ## 🔧 実装例
 
@@ -172,6 +188,12 @@ console.log(`進捗: ${stats.completed}/${stats.total}`);
 - ✅ 進捗状況の可視化
 - ✅ 状態管理とバリデーション
 - ✅ ファイル永続化
+
+### 4. サブエージェントパターン
+- ✅ 専門化されたサブエージェント
+- ✅ オーケストレーター・ワーカーパターン
+- ✅ 並列実行と自動タスク分解
+- ✅ 独立したコンテキスト管理
 
 ## 📦 依存関係
 
@@ -263,6 +285,9 @@ npm run dev
 
 - [TOOLS_CATALOG.md](./TOOLS_CATALOG.md) - ツールカタログ
 - [TODO_TOOL_GUIDE.md](./TODO_TOOL_GUIDE.md) - Todoツールガイド
+- [SUB_AGENT_GUIDE.md](./SUB_AGENT_GUIDE.md) - サブエージェントガイド
+- [CLAUDE_SDK_WORKDIR.md](./CLAUDE_SDK_WORKDIR.md) - サンドボックス化ガイド
+- [WORKING_DIRECTORY_GUIDE.md](./WORKING_DIRECTORY_GUIDE.md) - 作業ディレクトリガイド
 
 ## 💡 使用例
 
