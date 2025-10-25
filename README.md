@@ -19,6 +19,7 @@ claude-sdk-teacher/
 ├── WORKING_DIRECTORY_GUIDE.md # 作業ディレクトリ完全ガイド
 ├── CLAUDE_SDK_WORKDIR.md      # Claude SDKで固定ディレクトリで作業させる方法
 ├── SUB_AGENT_GUIDE.md         # サブエージェント実装完全ガイド
+├── HOOK_INTEGRATION_GUIDE.md  # Hook統合完全ガイド
 ├── package.json
 ├── tsconfig.json
 └── .env.example
@@ -110,6 +111,17 @@ Claude SDKで実行ディレクトリと違うディレクトリで作業させ�
 - 完全な実装例（SubAgent, SubAgentOrchestrator）
 - 応用パターン（反復改善、投票、専門家パネル）
 - ベストプラクティスとコード例
+
+### [HOOK_INTEGRATION_GUIDE.md](./HOOK_INTEGRATION_GUIDE.md)
+Hook統合システムの完全実装ガイド
+
+**内容:**
+- Hookの設計思想とアーキテクチャ
+- 4つの実装パターン（シンプル、型安全、ミドルウェア、プライオリティ）
+- エンタープライズグレードのHookシステム実装
+- 5つの実用的な応用例（ロギング、レート制限、キャッシング、バリデーション、メトリクス）
+- プラグインアーキテクチャとイベントバスパターン
+- ベストプラクティスと実装チェックリスト
 
 ## 🔧 実装例
 
@@ -286,6 +298,7 @@ npm run dev
 - [TOOLS_CATALOG.md](./TOOLS_CATALOG.md) - ツールカタログ
 - [TODO_TOOL_GUIDE.md](./TODO_TOOL_GUIDE.md) - Todoツールガイド
 - [SUB_AGENT_GUIDE.md](./SUB_AGENT_GUIDE.md) - サブエージェントガイド
+- [HOOK_INTEGRATION_GUIDE.md](./HOOK_INTEGRATION_GUIDE.md) - Hook統合ガイド
 - [CLAUDE_SDK_WORKDIR.md](./CLAUDE_SDK_WORKDIR.md) - サンドボックス化ガイド
 - [WORKING_DIRECTORY_GUIDE.md](./WORKING_DIRECTORY_GUIDE.md) - 作業ディレクトリガイド
 
